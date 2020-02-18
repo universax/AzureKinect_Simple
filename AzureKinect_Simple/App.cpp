@@ -42,7 +42,7 @@ void App::run() {
 		{
 			uint8_t* depth_buf = kinect.get_depth_image_buf();
 			cv::Mat depth_mat(depth_rows, depth_cols, CV_16U, (void*)depth_buf, cv::Mat::AUTO_STEP);
-			depth_mat *= 10;
+			depth_mat *= 20;
 			cv::imshow("depth", depth_mat);
 		}
 		

@@ -125,8 +125,8 @@ void AzureKinect::init_sensor()
     _device_configuration = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
     _device_configuration.camera_fps = K4A_FRAMES_PER_SECOND_30;
     _device_configuration.color_format = K4A_IMAGE_FORMAT_COLOR_MJPG;
-    _device_configuration.color_resolution = K4A_COLOR_RESOLUTION_1080P;
-    _device_configuration.depth_mode = K4A_DEPTH_MODE_NFOV_UNBINNED;
+    _device_configuration.color_resolution = K4A_COLOR_RESOLUTION_720P;
+    _device_configuration.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
     _device_configuration.synchronized_images_only = true;
     _device_configuration.wired_sync_mode = K4A_WIRED_SYNC_MODE_STANDALONE;
     
