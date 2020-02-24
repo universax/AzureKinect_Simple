@@ -1,7 +1,7 @@
 #include "AzureKinect.hpp"
 
 AzureKinect::AzureKinect()
-	: _device_index(0), _is_recording(false)
+	:_kinect_enable(false), _device_index(0), _is_recording(false)
 {
 }
 
@@ -10,17 +10,27 @@ AzureKinect::~AzureKinect()
 	close();
 }
 
-void AzureKinect::init()
+bool AzureKinect::init(std::string filename)
 {
-	init_sensor();
+    _playback_mode = (filename != "");
+    if (_playback_mode)
+    {
+        _kinect_enable = init_recorded_file(filename);
+    }
+    else {
+        _kinect_enable = init_sensor();
+    }
+    return _kinect_enable;
 }
 
 void AzureKinect::update()
 {
     if (update_capture()) {
-        update_depth();
+        
         //update_color();
-        update_recording();
+        //update_recording();
+        update_body();
+        update_depth();
     }
 }
 
@@ -35,16 +45,35 @@ void AzureKinect::clear()
     {
         k4a_image_release(_depth_image);
     }
+    if (_body_frame != NULL) {
+        k4abt_frame_release(_body_frame);
+    }
     if (_capture != NULL)
     {
         k4a_capture_release(_capture);
     }
+    if (_body_input_capture != NULL)
+    {
+        k4a_capture_release(_body_input_capture);
+    }
+    if (_body_index_map != NULL)
+    {
+        k4a_image_release(_body_index_map);
+    }
+    
 }
 
 void AzureKinect::close()
 {
-    k4a_device_stop_cameras(_device);
-    k4a_device_close(_device);
+    if (_playback)
+    {
+        k4a_playback_close(_playback);
+    }
+    else {
+        k4a_device_stop_cameras(_device);
+        k4a_device_close(_device);
+    }
+    
 }
 
 void AzureKinect::start_recording()
@@ -95,20 +124,37 @@ int AzureKinect::get_color_height()
     return _color_height;
 }
 
+uint8_t* AzureKinect::get_body_image_buf()
+{
+    return _body_image_buf;
+}
 
-void AzureKinect::init_sensor()
+int AzureKinect::get_body_image_width()
+{
+    return _body_image_width;
+}
+
+int AzureKinect::get_body_image_height()
+{
+    return _body_image_height;
+}
+
+
+bool AzureKinect::init_sensor()
 {
     // Get Sensor Count
     const uint32_t device_count = k4a_device_get_installed_count();
     if (device_count == 0)
     {
         throw k4a::error("Failed to found device!");
+        return false;
     }
 
     // Open
     if (K4A_FAILED(k4a_device_open(K4A_DEVICE_DEFAULT, &_device)))
     {
         throw k4a::error("Failed to open k4a device!");
+        return false;
     }
 
     // Device Serial Number
@@ -137,47 +183,111 @@ void AzureKinect::init_sensor()
     // Start Camera
     if (K4A_FAILED(k4a_device_start_cameras(_device, &_device_configuration)))
     {
-        k4a_device_stop_cameras(_device);
-        k4a_device_close(_device);
+        close();
         throw k4a::error("Failed to start camera!");
+        return false;
     }
 
-    //// Get Calibration
-    //if (K4A_FAILED(k4a_device_get_calibration(_device, _device_configuration.depth_mode, _device_configuration.color_resolution, &_calibration)))
-    //{
-    //    k4a_device_stop_cameras(_device);
-    //    k4a_device_close(_device);
-    //    throw k4a::error("Failed to get capture!");
-    //}
+    // Get Calibration
+    if (K4A_FAILED(k4a_device_get_calibration(_device, _device_configuration.depth_mode, _device_configuration.color_resolution, &_calibration)))
+    {
+        close();
+        throw k4a::error("Failed to get capture!");
+        return false;
+    }
 
+    // Get Transform
+    _transformation = k4a_transformation_create(&_calibration);
 
-    //// Get Transform
-    //_transformation = k4a_transformation_create(&_calibration);
+    // Get Tracker
+    k4abt_tracker_configuration_t tracker_config = K4ABT_TRACKER_CONFIG_DEFAULT;
+    if (K4A_FAILED(k4abt_tracker_create(&_calibration, tracker_config, &_tracker)))
+    {
+        close();
+        throw k4a::error("Failed to get tracker!");
+        return false;
+    }
 
+    printf("Success init device\n");
+    return true;
+}
+
+bool AzureKinect::init_recorded_file(std::string filename)
+{
+    if (k4a_playback_open(filename.c_str(), &_playback) == K4A_RESULT_SUCCEEDED)
+    {
+        // Get Calibration
+        if (K4A_FAILED(k4a_playback_get_calibration(_playback, &_calibration)))
+        {
+            close();
+            throw k4a::error("Failed to get capture!");
+            return false;
+        }
+
+        // Get Transform
+        _transformation = k4a_transformation_create(&_calibration);
+
+        // Get Tracker
+        k4abt_tracker_configuration_t tracker_config = K4ABT_TRACKER_CONFIG_DEFAULT;
+        if (K4A_FAILED(k4abt_tracker_create(&_calibration, tracker_config, &_tracker)))
+        {
+            close();
+            throw k4a::error("Failed to get tracker!");
+            return false;
+        }
+
+        printf("Success init playback\n");
+
+        return true;
+    }
+    else {
+        throw k4a::error("Failed load playback!");
+        return false;
+    }
+
+    return false;
 }
 
 bool AzureKinect::update_capture()
 {
     bool is_frame_new = false;
-    // Get Capture Frame
-    switch (k4a_device_get_capture(_device, &_capture, K4A_WAIT_INFINITE))
+    if (_playback)
     {
-    case K4A_WAIT_RESULT_SUCCEEDED:
-        //printf("Success to read a capture\n");
-        // Recording
-        is_frame_new = true;
-        break;
-    case K4A_WAIT_RESULT_TIMEOUT:
-        k4a_device_stop_cameras(_device);
-        k4a_device_close(_device);
-        throw k4a::error("Timed out waiting for a capture!");
-        break;
-    case K4A_WAIT_RESULT_FAILED:
-        k4a_device_stop_cameras(_device);
-        k4a_device_close(_device);
-        throw k4a::error("Failed to get capture!");
-        break;
+        switch (k4a_playback_get_next_capture(_playback, &_capture))
+        {
+        case K4A_WAIT_RESULT_SUCCEEDED:
+            is_frame_new = true;
+            break;
+        case K4A_WAIT_RESULT_TIMEOUT:
+            throw k4a::error("Timed out waiting for a capture!");
+            break;
+        case K4A_WAIT_RESULT_FAILED:
+            throw k4a::error("Failed to get capture!");
+            break;
+        default:
+            break;
+        }
     }
+    else {
+        // Get Capture Frame
+        switch (k4a_device_get_capture(_device, &_capture, K4A_WAIT_INFINITE))
+        {
+        case K4A_WAIT_RESULT_SUCCEEDED:
+            //printf("Success to read a capture\n");
+            // Recording
+            is_frame_new = true;
+            break;
+        case K4A_WAIT_RESULT_TIMEOUT:
+            close();
+            throw k4a::error("Timed out waiting for a capture!");
+            break;
+        case K4A_WAIT_RESULT_FAILED:
+            close();
+            throw k4a::error("Failed to get capture!");
+            break;
+        }
+    }
+    
 
     return is_frame_new;
 }
@@ -212,6 +322,70 @@ void AzureKinect::update_color()
     else {
         printf("color image is NULL\n");
     }
+}
+
+void AzureKinect::update_body()
+{
+    // Tracking
+    //k4abt_frame_t _body_frame = NULL;
+    k4a_wait_result_t queue_capture_result = k4abt_tracker_enqueue_capture(_tracker, _capture, K4A_WAIT_INFINITE);
+    if (queue_capture_result == K4A_WAIT_RESULT_FAILED)
+    {
+        throw k4a::error("Failed to capture tracker!");
+    }
+    else if (queue_capture_result == K4A_WAIT_RESULT_SUCCEEDED)
+    {
+        k4a_wait_result_t pop_frame_result = k4abt_tracker_pop_result(_tracker, &_body_frame, K4A_WAIT_INFINITE);
+        if (pop_frame_result == K4A_WAIT_RESULT_FAILED)
+        {
+            throw k4a::error("Failed to pop tracker!");
+        }
+        else if (pop_frame_result == K4A_WAIT_RESULT_SUCCEEDED)
+        {
+            size_t num_bodies = k4abt_frame_get_num_bodies(_body_frame);
+
+            // Get capture
+            _body_input_capture = k4abt_frame_get_capture(_body_frame);
+
+            // Map
+            _body_index_map = k4abt_frame_get_body_index_map(_body_frame);
+
+            // buf
+            _body_image_buf = k4a_image_get_buffer(_body_index_map);
+            // Size
+            _body_image_width = k4a_image_get_width_pixels(_body_index_map);
+            _body_image_height = k4a_image_get_height_pixels(_body_index_map);
+        }
+    }
+    
+    
+    //if (_body_frame != NULL)
+    //{
+    //    size_t num_bodies = k4abt_frame_get_num_bodies(_body_frame);
+    //    printf("Body count: %f\n", num_bodies);
+    //    for (size_t i = 0; i < num_bodies; i++)
+    //    {
+    //        // Skelton
+    //        k4abt_skeleton_t skelton;
+    //        k4abt_frame_get_body_skeleton(_body_frame, i, &skelton);
+    //        uint32_t id = k4abt_frame_get_body_id(_body_frame, i);
+
+    //        // Body Index
+    //        k4a_image_t body_image_map = k4abt_frame_get_body_index_map(_body_frame);
+
+    //        if (body_image_map != NULL)
+    //        {
+    //            k4a_image_release(body_image_map);
+    //        }
+    //    }
+
+
+
+        //k4abt_frame_release(_body_frame);
+    //}
+
+
+    
 }
 
 bool AzureKinect::setup_recording()

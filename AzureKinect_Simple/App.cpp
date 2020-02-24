@@ -11,10 +11,7 @@ App::App(bool running)
 }
 
 void App::init() {
-	
-	kinect.init();
-
-	_running = true;
+	_running = kinect.init("E:/KinectRecord/output.mkv");
 }
 
 void App::run() {
@@ -46,6 +43,18 @@ void App::run() {
 			cv::imshow("depth", depth_mat);
 		}
 		
+		// Body
+		int body_image_rows = kinect.get_body_image_height();
+		int body_image_cols = kinect.get_body_image_width();
+		if (body_image_rows * body_image_cols > 0)
+		{
+			uint8_t* body_image_buf = kinect.get_body_image_buf();
+			cv::Mat body_image_mat(body_image_rows, body_image_cols, CV_8U, (void*)body_image_buf, cv::Mat::AUTO_STEP);
+			//depth_mat *= 20;
+			cv::imshow("body", body_image_mat);
+		}
+
+
 		kinect.clear();
 
 		handleKey((char)cv::waitKey(1));

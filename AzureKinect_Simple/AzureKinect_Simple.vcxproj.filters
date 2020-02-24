@@ -35,5 +35,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <None Include="dnn_model_2_0.onnx" />
   </ItemGroup>
 </Project>
