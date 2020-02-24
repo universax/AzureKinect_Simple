@@ -149,7 +149,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\Users\unive\Develop\cv\opencv-4.2.0\build\install\x64\vc16\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opencv_highgui420.lib;opencv_imgproc420.lib;opencv_core420.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>opencv_highgui420.lib;opencv_imgproc420.lib;opencv_core420.lib;opencv_imgcodecs420.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

@@ -49,6 +49,10 @@ private:
     int _depth_width;
     int _depth_height;
 
+    // PointCloud
+    k4a_image_t _pointcloud_image;
+    uint8_t* _pointcloud_buf;
+
     // Recording
     bool _is_recording;
     
@@ -58,7 +62,7 @@ public:
     ~AzureKinect();
 
     bool init(std::string filename = "");
-    void update();
+    bool update();
     void clear();
     void close();
     void start_recording();
@@ -79,11 +83,14 @@ public:
     int get_body_image_width();
     int get_body_image_height();
 
+    // Pointcloud
+    uint8_t* get_pointcloud_buf();
+
 private:
     bool init_sensor();
     bool init_recorded_file(std::string filename);
     bool update_capture();
-    void update_depth();
+    bool update_depth();
     void update_color();
     void update_body();
 

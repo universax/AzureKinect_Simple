@@ -23,15 +23,15 @@ bool AzureKinect::init(std::string filename)
     return _kinect_enable;
 }
 
-void AzureKinect::update()
+bool AzureKinect::update()
 {
     if (update_capture()) {
-        
-        //update_color();
-        //update_recording();
         update_body();
-        update_depth();
+        update_color();
+        update_recording();
+        return update_depth();
     }
+    return false;
 }
 
 void AzureKinect::clear()
@@ -59,6 +59,10 @@ void AzureKinect::clear()
     if (_body_index_map != NULL)
     {
         k4a_image_release(_body_index_map);
+    }
+    if (_pointcloud_image != NULL)
+    {
+        k4a_image_release(_pointcloud_image);
     }
     
 }
@@ -139,6 +143,11 @@ int AzureKinect::get_body_image_height()
     return _body_image_height;
 }
 
+uint8_t* AzureKinect::get_pointcloud_buf()
+{
+    return _pointcloud_buf;
+}
+
 
 bool AzureKinect::init_sensor()
 {
@@ -171,7 +180,7 @@ bool AzureKinect::init_sensor()
     _device_configuration = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
     _device_configuration.camera_fps = K4A_FRAMES_PER_SECOND_30;
     _device_configuration.color_format = K4A_IMAGE_FORMAT_COLOR_MJPG;
-    _device_configuration.color_resolution = K4A_COLOR_RESOLUTION_720P;
+    _device_configuration.color_resolution = K4A_COLOR_RESOLUTION_1080P;
     _device_configuration.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
     _device_configuration.synchronized_images_only = true;
     _device_configuration.wired_sync_mode = K4A_WIRED_SYNC_MODE_STANDALONE;
@@ -251,7 +260,7 @@ bool AzureKinect::init_recorded_file(std::string filename)
 bool AzureKinect::update_capture()
 {
     bool is_frame_new = false;
-    if (_playback)
+    if (_playback_mode)
     {
         switch (k4a_playback_get_next_capture(_playback, &_capture))
         {
@@ -259,10 +268,12 @@ bool AzureKinect::update_capture()
             is_frame_new = true;
             break;
         case K4A_WAIT_RESULT_TIMEOUT:
-            throw k4a::error("Timed out waiting for a capture!");
+            //throw k4a::error("Timed out waiting for a capture!");
+            printf("Timed out waiting for a capture!");
             break;
         case K4A_WAIT_RESULT_FAILED:
-            throw k4a::error("Failed to get capture!");
+            //throw k4a::error("Failed to get capture!");
+            printf("Failed to get capture!");
             break;
         default:
             break;
@@ -292,20 +303,48 @@ bool AzureKinect::update_capture()
     return is_frame_new;
 }
 
-void AzureKinect::update_depth()
+bool AzureKinect::update_depth()
 {
+    bool result = false;
+
     // Access the depth16 image
-    _depth_image = k4a_capture_get_depth_image(_capture);
-    if (_depth_image != NULL) {
-        // buf
-        _depth_buf = k4a_image_get_buffer(_depth_image);
-        // Size
-        _depth_width = k4a_image_get_width_pixels(_depth_image);
-        _depth_height = k4a_image_get_height_pixels(_depth_image);
+    k4a_image_t depth_raw_image;
+    depth_raw_image = k4a_capture_get_depth_image(_capture);
+    if (depth_raw_image != NULL) {
+        // Transform to color camera
+        //k4a_image_t transformed = NULL;
+        k4a_image_create(K4A_IMAGE_FORMAT_DEPTH16, 1920, 1080, 1920 * sizeof(uint16_t), &_depth_image);
+        if (k4a_transformation_depth_image_to_color_camera(_transformation, depth_raw_image, _depth_image) == K4A_RESULT_SUCCEEDED)
+        {
+            if (_depth_image != NULL)
+            {
+                // buf
+                _depth_buf = k4a_image_get_buffer(_depth_image);
+                // Size
+                _depth_width = k4a_image_get_width_pixels(_depth_image);
+                _depth_height = k4a_image_get_height_pixels(_depth_image);
+
+                // point cloud
+                k4a_image_create(K4A_IMAGE_FORMAT_CUSTOM, 1920, 1080, 1920 * 6, &_pointcloud_image);
+                if (k4a_transformation_depth_image_to_point_cloud(_transformation, _depth_image, K4A_CALIBRATION_TYPE_COLOR, _pointcloud_image) == K4A_RESULT_SUCCEEDED)
+                {
+                    // buf
+                    _pointcloud_buf = k4a_image_get_buffer(_pointcloud_image);
+                    result = true;
+                }
+            }
+            else {
+                printf("depth image is NULL\n");
+            }
+        }
+        //k4a_image_release(transformed);
+        k4a_image_release(depth_raw_image);
     }
     else {
-        printf("depth image is NULL\n");
+        printf("raw depth image is NULL\n");
     }
+
+    return result;
 }
 
 void AzureKinect::update_color()
@@ -332,6 +371,7 @@ void AzureKinect::update_body()
     if (queue_capture_result == K4A_WAIT_RESULT_FAILED)
     {
         throw k4a::error("Failed to capture tracker!");
+        //printf("");
     }
     else if (queue_capture_result == K4A_WAIT_RESULT_SUCCEEDED)
     {
@@ -352,40 +392,12 @@ void AzureKinect::update_body()
 
             // buf
             _body_image_buf = k4a_image_get_buffer(_body_index_map);
+
             // Size
             _body_image_width = k4a_image_get_width_pixels(_body_index_map);
             _body_image_height = k4a_image_get_height_pixels(_body_index_map);
         }
     }
-    
-    
-    //if (_body_frame != NULL)
-    //{
-    //    size_t num_bodies = k4abt_frame_get_num_bodies(_body_frame);
-    //    printf("Body count: %f\n", num_bodies);
-    //    for (size_t i = 0; i < num_bodies; i++)
-    //    {
-    //        // Skelton
-    //        k4abt_skeleton_t skelton;
-    //        k4abt_frame_get_body_skeleton(_body_frame, i, &skelton);
-    //        uint32_t id = k4abt_frame_get_body_id(_body_frame, i);
-
-    //        // Body Index
-    //        k4a_image_t body_image_map = k4abt_frame_get_body_index_map(_body_frame);
-
-    //        if (body_image_map != NULL)
-    //        {
-    //            k4a_image_release(body_image_map);
-    //        }
-    //    }
-
-
-
-        //k4abt_frame_release(_body_frame);
-    //}
-
-
-    
 }
 
 bool AzureKinect::setup_recording()

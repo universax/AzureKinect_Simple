@@ -36,5 +36,6 @@
   <ItemGroup>
     <None Include="packages.config" />
     <None Include="dnn_model_2_0.onnx" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\content\**\*.*" />
   </ItemGroup>
 </Project>
