@@ -15,8 +15,8 @@ namespace pcl_func {
 		*calcPoints = *outputPoints;
 
 		//Filter
-		//float voxelVal = 0.01f;
-		//voxelGridFilter(voxelVal, calcPoints);
+		float voxelVal = 0.05f;
+		voxelGridFilter(voxelVal, calcPoints);
 		//statisticalOutlierFilter(calcPoints);
 
 		transformToZeroPoint(calcPoints, sensor, calcPoints);
@@ -26,72 +26,9 @@ namespace pcl_func {
 
 		// Visualizer
 		visualizer.updateVisualizer(calcPoints);
-		
-		//-----------------------------------
-		//クラスタ分割
-		//-----------------------------------
-		//ポイントクラウドをクラスタに分割
-		//voxelGridFilter(0.1f, calcPoints);
-		euclideanClusterExtraction(calcPoints, eachClouds);
-		calcPoints.reset();
 
-		//重心計算
-		centroids.clear();
-		for (int i = 0; i < eachClouds.size(); i++)
-		{
-			//クラスタの重心を計算
-			Eigen::Vector4f center = centroid(eachClouds[i]);
-			centroids.push_back(center);
-		}
 
-		//分割されたクラスタに色を付けて表示
-		pcl::PointCloud<pcl::PointXYZRGB>::Ptr clusteredColorCloud(new pcl::PointCloud<pcl::PointXYZRGB>());
-		vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> coloredClouds;
-
-		for (int i = 0; i < eachClouds.size(); i++)
-		{
-			pcl::PointCloud<pcl::PointXYZRGB>::Ptr cc(new pcl::PointCloud<pcl::PointXYZRGB>());
-			pcl::copyPointCloud(*eachClouds[i], *cc);
-			coloredClouds.push_back(cc);
-
-			double red = 255;
-			double green = 255;
-			double blue = 255;
-
-			switch (i % 3)
-			{
-			case 0:
-				red = 255;
-				green = 0;
-				blue = 0;
-				break;
-			case 1:
-				red = 0;
-				green = 255;
-				blue = 0;
-				break;
-			case 2:
-				red = 127;
-				green = 0;
-				blue = 255;
-				break;
-			default:
-				break;
-			}
-
-#pragma omp parallel for
-			for (int j = 0; j < coloredClouds[i]->points.size(); j++)
-			{
-				coloredClouds[i]->points[j].r = red;
-				coloredClouds[i]->points[j].g = green;
-				coloredClouds[i]->points[j].b = blue;
-			}
-			*clusteredColorCloud += *coloredClouds[i];
-		}
-		cout << "Cluster: " << eachClouds.size() << endl;
-		//vlpViewer.showCloud(clusteredColorCloud);
-
-		std::cout << "----------------------------------\n" << std::endl;
+		//std::cout << "----------------------------------\n" << std::endl;
 	}
 
 	void PCL_Functions::registrationAll(pcl::PointCloud<PointType>::Ptr inputCloud, pcl::PointCloud<PointType>::Ptr outputClouds, Eigen::Matrix4f &matrix) {

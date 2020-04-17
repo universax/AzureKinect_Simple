@@ -26,7 +26,7 @@ bool AzureKinect::init(std::string filename)
 bool AzureKinect::update()
 {
     if (update_capture()) {
-        update_body();
+        //update_body();
         update_color();
         update_recording();
         return update_depth();
@@ -179,7 +179,7 @@ bool AzureKinect::init_sensor()
     // Configure
     _device_configuration = K4A_DEVICE_CONFIG_INIT_DISABLE_ALL;
     _device_configuration.camera_fps = K4A_FRAMES_PER_SECOND_30;
-    _device_configuration.color_format = K4A_IMAGE_FORMAT_COLOR_MJPG;
+    _device_configuration.color_format = K4A_IMAGE_FORMAT_COLOR_BGRA32;
     _device_configuration.color_resolution = K4A_COLOR_RESOLUTION_1080P;
     _device_configuration.depth_mode = K4A_DEPTH_MODE_WFOV_2X2BINNED;
     _device_configuration.synchronized_images_only = true;
@@ -331,6 +331,9 @@ bool AzureKinect::update_depth()
                     // buf
                     _pointcloud_buf = k4a_image_get_buffer(_pointcloud_image);
                     result = true;
+                }
+                else {
+                    printf("Failed to k4a_transformation_depth_image_to_point_cloud");
                 }
             }
             else {
